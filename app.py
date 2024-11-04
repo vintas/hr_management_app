@@ -1,14 +1,18 @@
 import random
 from flask import Flask, jsonify, request, make_response
+from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
+from flask_migrate import Migrate
 from datetime import datetime
 
 app = Flask(__name__)
+CORS(app, origins=["http://localhost:3000"])
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///hr_management.db'
 app.config['JWT_SECRET_KEY'] = 'your_secret_key'
 db = SQLAlchemy(app)
+migrate = Migrate(app, db)
 jwt = JWTManager(app)
 
 class User(db.Model):
@@ -16,6 +20,7 @@ class User(db.Model):
     username = db.Column(db.String(50), unique=True, nullable=False)
     password = db.Column(db.String(200), nullable=False)
     role = db.Column(db.String(10), nullable=False)
+    is_hr = db.Column(db.Boolean, default=False)
 
 class Employee(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -36,7 +41,7 @@ def login():
     user = User.query.filter_by(username=data['username']).first()
     if user and check_password_hash(user.password, data['password']):
         token = create_access_token(identity={'id': user.id, 'role': user.role})
-        return jsonify({'token': token}), 200
+        return jsonify({'token': token, 'is_hr': user.is_hr}), 200
     return jsonify({'message': 'Invalid credentials'}), 401
 
 # HR can add a new employee
@@ -55,6 +60,7 @@ def add_employee():
     department = data.get('department')
     role = data.get('role')
     salary = data.get('salary')
+    is_hr = data.get('is_hr', False)  
 
     try:
         dob = datetime.strptime(dob, '%Y-%m-%d')
@@ -67,7 +73,7 @@ def add_employee():
     password = generate_password_hash("password123")  # Use a better password strategy in production
 
     # Create user and employee records
-    new_user = User(username=username, password=password, role=role)
+    new_user = User(username=username, password=password, role=role, is_hr=is_hr)
     db.session.add(new_user)
     db.session.commit()
 
@@ -85,6 +91,33 @@ def add_employee():
     db.session.commit()
 
     return jsonify({"message": "Employee added successfully", "username": username, "default_password": "password123", "role": role})
+
+@app.route('/employees', methods=['GET'])
+@jwt_required()
+def get_employees():
+    current_user = get_jwt_identity()
+    if current_user['role'] != 'HR':
+        return jsonify({'message': 'Unauthorized'}), 403
+
+    # Query all employees
+    employees = Employee.query.all()
+
+    # Format employee data
+    employees_data = [
+        {
+            "id": employee.id,
+            "name": employee.name,
+            "dob": employee.dob,
+            "joining_date": employee.joining_date,
+            "education": employee.education,
+            "department": employee.department,
+            "role": employee.role,
+            "salary": employee.salary,
+        }
+        for employee in employees
+    ]
+
+    return jsonify(employees_data), 200
 
 # HR can update employee details
 @app.route('/employees/<int:id>', methods=['PUT'])
