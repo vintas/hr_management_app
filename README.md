@@ -74,7 +74,7 @@ from app import app, db
 from app import User  
 from werkzeug.security import generate_password_hash
 with app.app_context():
-    admin_user = User(username="admin", password=generate_password_hash("admin"), role='HR')
+    admin_user = User(username="admin", password=generate_password_hash("admin"), role='HR', is_hr=True)
     db.session.add(admin_user)
     db.session.commit()
 ```
