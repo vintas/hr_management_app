@@ -1,39 +1,71 @@
-import React, { useState } from 'react';
-import axios from 'axios';
-import { useNavigate } from 'react-router-dom';
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
-function Login() {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+const Login = () => {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const navigate = useNavigate();
 
   const handleLogin = async (e) => {
     e.preventDefault();
     try {
-      const res = await axios.post(`${process.env.REACT_APP_BACKEND_URL}/login`, { username, password });
-      const { token, is_hr } = res.data;
-      localStorage.setItem('token', token);
-      alert("Login successful!");
+      const response = await fetch("/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ username, password }),
+      });
 
-        if (is_hr) {
-            navigate('/hr-dashboard');  // Redirect to HR dashboard
-        } else {
-            navigate('/employee-dashboard');  // Redirect to employee dashboard
-        }
+      if (!response.ok) {
+        throw new Error("Login failed");
+      }
+
+      const data = await response.json();
+      localStorage.setItem("token", data.token);
+
+      // Redirect based on is_hr property
+      if (data.is_hr) {
+        navigate("/hr-dashboard");
+      } else {
+        navigate("/employee-dashboard");
+      }
     } catch (err) {
-      setError('Invalid credentials');
+      console.error(err);
+      alert("Invalid username or password. Please try again.");
     }
   };
 
   return (
-    <form onSubmit={handleLogin}>
-      <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Username" required />
-      <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" required />
-      <button type="submit">Login</button>
-      {error && <p>{error}</p>}
-    </form>
+    <div className="container mt-5">
+      <h1>Login</h1>
+      <form onSubmit={handleLogin}>
+        <div className="form-group">
+          <label>Username</label>
+          <input
+            type="text"
+            className="form-control"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            required
+          />
+        </div>
+        <div className="form-group">
+          <label>Password</label>
+          <input
+            type="password"
+            className="form-control"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
+        </div>
+        <button type="submit" className="btn btn-primary mt-3">
+          Login
+        </button>
+      </form>
+    </div>
   );
-}
+};
 
 export default Login;

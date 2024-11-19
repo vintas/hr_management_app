@@ -205,6 +205,19 @@ def get_employee_details():
 
     return jsonify(employee_data)
 
+@app.route('/user/is_hr', methods=['GET'])
+@jwt_required()
+def is_hr_user():
+    """
+    Returns whether the current user is an HR.
+    """
+    current_user = get_jwt_identity()
+
+    # Retrieve the is_hr field from the JWT identity payload
+    is_hr = current_user.get("is_hr")
+
+    return jsonify({"is_hr": is_hr}), 200
+
 if __name__ == "__main__":
     with app.app_context():
         db.create_all()

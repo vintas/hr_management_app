@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from "react";
+import { Container, Card, Alert } from "react-bootstrap";
+import AppNavbar from "./Navbar";
 
 const EmployeeDashboard = () => {
-  const [employeeData, setEmployeeData] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [employeeDetails, setEmployeeDetails] = useState(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
     const fetchEmployeeDetails = async () => {
       try {
-        const response = await fetch(`/employees/me`, {
+        const response = await fetch("/employees/me", {
+          method: "GET",
           headers: {
             Authorization: `Bearer ${localStorage.getItem("token")}`,
           },
@@ -19,55 +21,63 @@ const EmployeeDashboard = () => {
         }
 
         const data = await response.json();
-        setEmployeeData(data);
-        setLoading(false);
+        setEmployeeDetails(data);
       } catch (err) {
+        console.error(err);
         setError(err.message);
-        setLoading(false);
       }
     };
 
     fetchEmployeeDetails();
   }, []);
 
-  if (loading) return <p>Loading...</p>;
-  if (error) return <p>Error: {error}</p>;
+  if (error) {
+    return (
+      <div>
+        <AppNavbar />
+        <Alert variant="danger">{error}</Alert>
+      </div>
+    );
+  }
+
+  if (!employeeDetails) {
+    return (
+      <div>
+        <AppNavbar />
+        <p>Loading...</p>
+      </div>
+    );
+  }
 
   return (
     <div>
-      <h1>Employee Dashboard</h1>
-      <table>
-        <tbody>
-          <tr>
-            <td><strong>Name:</strong></td>
-            <td>{employeeData.name}</td>
-          </tr>
-          <tr>
-            <td><strong>Date of Birth:</strong></td>
-            <td>{employeeData.dob}</td>
-          </tr>
-          <tr>
-            <td><strong>Joining Date:</strong></td>
-            <td>{employeeData.joining_date}</td>
-          </tr>
-          <tr>
-            <td><strong>Education:</strong></td>
-            <td>{employeeData.education}</td>
-          </tr>
-          <tr>
-            <td><strong>Department:</strong></td>
-            <td>{employeeData.department}</td>
-          </tr>
-          <tr>
-            <td><strong>Role:</strong></td>
-            <td>{employeeData.role}</td>
-          </tr>
-          <tr>
-            <td><strong>Salary:</strong></td>
-            <td>{employeeData.salary}</td>
-          </tr>
-        </tbody>
-      </table>
+      <AppNavbar />
+      <Container>
+        <h1>Employee Dashboard</h1>
+        <Card className="mt-4">
+          <Card.Body>
+            <Card.Title>{employeeDetails.name}</Card.Title>
+            <Card.Text>
+              <strong>Date of Birth:</strong> {employeeDetails.dob}
+            </Card.Text>
+            <Card.Text>
+              <strong>Joining Date:</strong> {employeeDetails.joining_date}
+            </Card.Text>
+            <Card.Text>
+              <strong>Education:</strong> {employeeDetails.education}
+            </Card.Text>
+            <Card.Text>
+              <strong>Department:</strong> {employeeDetails.department}
+            </Card.Text>
+            <Card.Text>
+              <strong>Role:</strong> {employeeDetails.role}
+            </Card.Text>
+            <Card.Text>
+              <strong>Salary:</strong> ${employeeDetails.salary}
+            </Card.Text>
+          </Card.Body>
+        </Card>
+      </Container>
     </div>
   );
 };
