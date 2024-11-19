@@ -1,25 +1,27 @@
-import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect } from "react";
+import { Link, useNavigate } from "react-router-dom";
 
-function HRDashboard() {
+const HRDashboard = () => {
   const [employees, setEmployees] = useState([]);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const fetchEmployees = async () => {
-      const token = localStorage.getItem('token'); // Retrieve JWT token
+      try {
+        const response = await fetch(`/employees`, {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+        });
 
-      const response = await fetch('http://localhost:5000/employees', {
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
+        if (!response.ok) {
+          throw new Error("Failed to fetch employees");
         }
-      });
 
-      if (response.ok) {
         const data = await response.json();
         setEmployees(data);
-      } else {
-        console.error("Failed to fetch employees");
+      } catch (err) {
+        console.error(err);
       }
     };
 
@@ -29,19 +31,36 @@ function HRDashboard() {
   return (
     <div>
       <h1>HR Dashboard</h1>
-      <h2>Employee List</h2>
-      <ul>
-        {employees.map(employee => (
-          <li key={employee.id}>
-            <p>Name: {employee.name}</p>
-            <p>Role: {employee.role}</p>
-            <p>Department: {employee.department}</p>
-            <Link to={`/edit-employee/${employee.id}`}>Edit</Link> {/* Link to edit page */}
-          </li>
-        ))}
-      </ul>
+      <button
+        onClick={() => navigate("/add-employee")}
+        className="btn btn-primary"
+      >
+        Add Employee
+      </button>
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Role</th>
+            <th>Department</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {employees.map((employee) => (
+            <tr key={employee.id}>
+              <td>{employee.name}</td>
+              <td>{employee.role}</td>
+              <td>{employee.department}</td>
+              <td>
+                <Link to={`/edit-employee/${employee.id}`}>Edit</Link>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
-}
+};
 
 export default HRDashboard;

@@ -1,87 +1,159 @@
-import React, { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import React, { useState, useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 
-function EditEmployee() {
-  const { id } = useParams(); // Get employee ID from the URL
-  const [employee, setEmployee] = useState({
-    name: '',
-    dob: '',
-    joining_date: '',
-    education: '',
-    department: '',
-    role: '',
-    salary: ''
+const EditEmployee = () => {
+  const { id } = useParams(); // Get the employee ID from the URL
+  const navigate = useNavigate();
+
+  const [employeeData, setEmployeeData] = useState({
+    name: "",
+    dob: "",
+    joining_date: "",
+    education: "",
+    department: "",
+    role: "",
+    salary: "",
   });
 
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  // Fetch employee details
   useEffect(() => {
     const fetchEmployee = async () => {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:5000/employees/${id}`, {
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
+      try {
+        const response = await fetch(`/employees/${id}`, {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+        });
+        if (!response.ok) {
+          throw new Error("Failed to fetch employee data");
         }
-      });
-
-      if (response.ok) {
         const data = await response.json();
-        setEmployee(data);
-      } else {
-        console.error("Failed to fetch employee details");
+        setEmployeeData(data);
+        setLoading(false);
+      } catch (err) {
+        setError(err.message);
+        setLoading(false);
       }
     };
 
     fetchEmployee();
   }, [id]);
 
+  // Handle input change
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setEmployee((prevEmployee) => ({ ...prevEmployee, [name]: value }));
+    setEmployeeData({ ...employeeData, [name]: value });
   };
 
+  // Submit updated data
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const token = localStorage.getItem('token');
-    const response = await fetch(`http://localhost:5000/employees/${id}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`
-      },
-      body: JSON.stringify(employee)
-    });
 
-    if (response.ok) {
-      alert("Employee details updated successfully!");
-    } else {
-      console.error("Failed to update employee details");
+    try {
+      const response = await fetch(`/employees/${id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+        body: JSON.stringify(employeeData),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to update employee data");
+      }
+
+      // Navigate back to HR dashboard after successful update
+      navigate("/hr-dashboard");
+    } catch (err) {
+      setError(err.message);
     }
   };
 
+  if (loading) return <p>Loading...</p>;
+  if (error) return <p>Error: {error}</p>;
+
   return (
     <div>
-      <h1>Edit Employee</h1>
+      <h2>Edit Employee</h2>
       <form onSubmit={handleSubmit}>
-        <label>
-          Name:
-          <input type="text" name="name" value={employee.name} onChange={handleChange} />
-        </label>
-        <label>
-          Department:
-          <input type="text" name="department" value={employee.department} onChange={handleChange} />
-        </label>
-        <label>
-          Role:
-          <input type="text" name="role" value={employee.role} onChange={handleChange} />
-        </label>
-        <label>
-          Salary:
-          <input type="number" name="salary" value={employee.salary} onChange={handleChange} />
-        </label>
-        <button type="submit">Save</button>
+        <div>
+          <label>Name:</label>
+          <input
+            type="text"
+            name="name"
+            value={employeeData.name}
+            onChange={handleChange}
+            required
+          />
+        </div>
+        <div>
+          <label>Date of Birth:</label>
+          <input
+            type="date"
+            name="dob"
+            value={employeeData.dob}
+            onChange={handleChange}
+            required
+          />
+        </div>
+        <div>
+          <label>Joining Date:</label>
+          <input
+            type="date"
+            name="joining_date"
+            value={employeeData.joining_date}
+            onChange={handleChange}
+            required
+          />
+        </div>
+        <div>
+          <label>Education:</label>
+          <input
+            type="text"
+            name="education"
+            value={employeeData.education}
+            onChange={handleChange}
+            required
+          />
+        </div>
+        <div>
+          <label>Department:</label>
+          <input
+            type="text"
+            name="department"
+            value={employeeData.department}
+            onChange={handleChange}
+            required
+          />
+        </div>
+        <div>
+          <label>Role:</label>
+          <input
+            type="text"
+            name="role"
+            value={employeeData.role}
+            onChange={handleChange}
+            required
+          />
+        </div>
+        <div>
+          <label>Salary:</label>
+          <input
+            type="number"
+            name="salary"
+            value={employeeData.salary}
+            onChange={handleChange}
+            required
+          />
+        </div>
+        <button type="submit">Update Employee</button>
       </form>
     </div>
   );
-}
+};
 
 export default EditEmployee;
