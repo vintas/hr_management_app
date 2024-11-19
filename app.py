@@ -186,10 +186,10 @@ def get_employee(id):
 @app.route('/employees/me', methods=['GET'])
 @jwt_required()
 def get_employee_details():
-    current_user_id = get_jwt_identity()
+    current_user = get_jwt_identity()
     
     # Fetch the employee associated with the current user's ID
-    employee = Employee.query.filter_by(user_id=current_user_id).first()
+    employee = Employee.query.filter_by(user_id=current_user['id']).first()
     if not employee:
         return jsonify({"message": "Employee details not found"}), 404
 
