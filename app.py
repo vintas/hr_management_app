@@ -40,7 +40,7 @@ def login():
     data = request.json
     user = User.query.filter_by(username=data['username']).first()
     if user and check_password_hash(user.password, data['password']):
-        token = create_access_token(identity={'id': user.id, 'role': user.role})
+        token = create_access_token(identity={'id': user.id, 'is_hr': user.is_hr})
         return jsonify({'token': token, 'is_hr': user.is_hr}), 200
     return jsonify({'message': 'Invalid credentials'}), 401
 
@@ -49,7 +49,7 @@ def login():
 @jwt_required()
 def add_employee():
     current_user = get_jwt_identity()
-    if current_user['role'] != 'HR':
+    if not current_user['is_hr']:
         return jsonify({'message': 'Unauthorized'}), 403
 
     data = request.get_json()
@@ -96,7 +96,7 @@ def add_employee():
 @jwt_required()
 def get_employees():
     current_user = get_jwt_identity()
-    if current_user['role'] != 'HR':
+    if not current_user['is_hr']:
         return jsonify({'message': 'Unauthorized'}), 403
 
     # Query all employees
@@ -124,34 +124,64 @@ def get_employees():
 @jwt_required()
 def update_employee(id):
     current_user = get_jwt_identity()
-    if current_user['role'] != 'HR':
+    if not current_user['is_hr']:
         return jsonify({'message': 'Unauthorized'}), 403
 
-    data = request.json
-    employee = Employee.query.get_or_404(id)
-    for key, value in data.items():
-        setattr(employee, key, value)
-    db.session.commit()
-    return jsonify({'message': 'Employee details updated successfully'}), 200
+    employee = Employee.query.get(id)
+    if not employee:
+        return jsonify({"error": "Employee not found"}), 404
 
-# Employee can view their own details
+    # Parse request JSON data
+    data = request.get_json()
+
+    try:
+        # Update employee fields only if provided in data
+        employee.name = data.get('name', employee.name)
+        employee.department = data.get('department', employee.department)
+        employee.role = data.get('role', employee.role)
+        employee.salary = data.get('salary', employee.salary)
+        employee.education = data.get('education', employee.education)
+
+        # Parse 'dob' and 'joining_date' only if they are provided and non-empty
+        if 'dob' in data and data['dob']:  # Check if 'dob' exists and is non-empty
+            employee.dob = datetime.strptime(data['dob'], '%Y-%m-%d')
+        if 'joining_date' in data and data['joining_date']:  # Check if 'joining_date' exists and is non-empty
+            employee.joining_date = datetime.strptime(data['joining_date'], '%Y-%m-%d')
+
+        # Commit changes to the database
+        db.session.commit()
+        return jsonify({"message": "Employee updated successfully"}), 200
+
+    except ValueError:
+        # Handle invalid date format error
+        return jsonify({"error": "Invalid date format. Please use YYYY-MM-DD."}), 400
+
 @app.route('/employees/<int:id>', methods=['GET'])
 @jwt_required()
 def get_employee(id):
     current_user = get_jwt_identity()
-    employee = Employee.query.get_or_404(id)
-    if current_user['role'] != 'HR' and employee.user_id != current_user['id']:
-        return jsonify({'message': 'Unauthorized'}), 403
-    employee_data = {
-        'name': employee.name,
-        'dob': employee.dob,
-        'joining_date': employee.joining_date,
-        'education': employee.education,
-        'department': employee.department,
-        'role': employee.role,
-        'salary': employee.salary
+
+    # HR users can access any employee's details; others can only view their own
+    # current_user['id'] - 1 because User table has the Admin user too. TODO fix the User Employee primary ID issue.
+    if not current_user['is_hr'] and current_user['id'] - 1 != id:
+        return jsonify({"error": "Permission denied"}), 403
+
+    employee = Employee.query.get(id)
+    if not employee:
+        return jsonify({"error": "Employee not found"}), 404
+
+    # Format response with ISO 8601 date format
+    response = {
+        "id": employee.id,
+        "name": employee.name,
+        "dob": employee.dob.strftime('%Y-%m-%d') if employee.dob else None,
+        "joining_date": employee.joining_date.strftime('%Y-%m-%d') if employee.joining_date else None,
+        "education": employee.education,
+        "department": employee.department,
+        "role": employee.role,
+        "salary": employee.salary
     }
-    return jsonify(employee_data), 200
+    return jsonify(response), 200
 
 @app.route('/employees/me', methods=['GET'])
 @jwt_required()
