@@ -218,6 +218,30 @@ def is_hr_user():
 
     return jsonify({"is_hr": is_hr}), 200
 
+@app.route('/delete_employee/<int:employee_id>', methods=['DELETE'])
+@jwt_required()
+def delete_employee(employee_id):
+    current_user_id = get_jwt_identity()["id"]
+    is_hr = get_jwt_identity().get("is_hr", False)
+
+    if not is_hr:
+        return jsonify({"message": "Unauthorized access"}), 403
+
+    employee = Employee.query.get(employee_id)
+    user = User.query.get(employee_id+1)
+
+    if not employee or not user:
+        return jsonify({"message": "Employee not found"}), 404
+
+    try:
+        db.session.delete(employee)
+        db.session.delete(user)
+        db.session.commit()
+        return jsonify({"message": "Employee deleted successfully"}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"message": "Error deleting employee", "error": str(e)}), 500
+    
 if __name__ == "__main__":
     with app.app_context():
         db.create_all()
