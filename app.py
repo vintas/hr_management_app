@@ -1,11 +1,12 @@
 import random
+from datetime import datetime
+
 from flask import Flask, jsonify, request, make_response
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 from flask_migrate import Migrate
-from datetime import datetime
 
 app = Flask(__name__)
 CORS(app, origins=["http://localhost:3000"])
@@ -15,12 +16,18 @@ db = SQLAlchemy(app)
 migrate = Migrate(app, db)
 jwt = JWTManager(app)
 
+# Constants
+DEFAULT_PASSWORD = "password123"
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(50), unique=True, nullable=False)
     password = db.Column(db.String(200), nullable=False)
-    role = db.Column(db.String(10), nullable=False)
+    # role = db.Column(db.String(10), nullable=False)
     is_hr = db.Column(db.Boolean, default=False)
+    is_approved = db.Column(db.Boolean, default=False)
+
+    def __repr__(self):
+        return f"<User {self.username}>"
 
 class Employee(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -70,10 +77,10 @@ def add_employee():
 
     # Generate username and password for the employee
     username = name.lower().replace(" ", "") + str(random.randint(100, 999))
-    password = generate_password_hash("password123")  # Use a better password strategy in production
+    password = generate_password_hash(DEFAULT_PASSWORD)
 
     # Create user and employee records
-    new_user = User(username=username, password=password, role=role, is_hr=is_hr)
+    new_user = User(username=username, password=password, is_hr=is_hr)
     db.session.add(new_user)
     db.session.commit()
 
@@ -90,7 +97,7 @@ def add_employee():
     db.session.add(new_employee)
     db.session.commit()
 
-    return jsonify({"message": "Employee added successfully", "username": username, "default_password": "password123", "role": role})
+    return jsonify({"message": "Employee added successfully", "username": username, "default_password": DEFAULT_PASSWORD, "role": role})
 
 @app.route('/employees', methods=['GET'])
 @jwt_required()
