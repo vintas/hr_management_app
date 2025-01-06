@@ -36,7 +36,7 @@ function ApprovalPage() {
     return (
         <div>
             <h1>Approval Page</h1>
-            <button onClick={() => navigate("/home")}>Back to Dashboard</button>
+            <button onClick={() => navigate("/hr-dashboard")}>Back to Dashboard</button>
             {selectedUser ? (
                 <div>
                     <h2>Approve User</h2>
