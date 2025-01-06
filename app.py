@@ -371,12 +371,16 @@ def delete_employee(employee_id):
         return jsonify({"message": "Unauthorized access"}), 403
 
     employee = Employee.query.get(employee_id)
-    user = User.query.get(employee.employee_id)
+    user = User.query.get(employee.user_id)
+    leaves = LeaveRequest.query.filter_by(employee_id=employee_id).all()
 
     if not employee or not user:
         return jsonify({"message": "Employee not found"}), 404
 
     try:
+        # todo fix it by creating is_deleted column in employee table. This is temporary solution.
+        for leave in leaves:
+            db.session.delete(leave)
         db.session.delete(employee)
         db.session.delete(user)
         db.session.commit()
