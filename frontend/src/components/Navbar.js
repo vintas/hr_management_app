@@ -30,6 +30,10 @@ const AppNavbar = () => {
     }
   };
 
+  const navigateToLeave = async () => {
+    navigate("/my-leaves");
+  }
+
   const handleLogout = () => {
     localStorage.removeItem("token");
     navigate("/"); // Redirect to login
@@ -42,6 +46,7 @@ const AppNavbar = () => {
       <Navbar.Collapse id="basic-navbar-nav">
         <Nav className="me-auto">
           <Nav.Link onClick={handleHome}>Home</Nav.Link>
+          <Nav.Link onClick={navigateToLeave}>My Leaves</Nav.Link>
         </Nav>
         <Button variant="outline-light" onClick={handleLogout}>
           Logout

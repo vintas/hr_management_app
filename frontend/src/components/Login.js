@@ -1,9 +1,11 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Button } from "react-bootstrap";
 
 const Login = () => {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState(null); // State to track the error message
   const navigate = useNavigate();
 
   const handleLogin = async (e) => {
@@ -17,22 +19,26 @@ const Login = () => {
         body: JSON.stringify({ username, password }),
       });
 
-      if (!response.ok) {
-        throw new Error("Login failed");
-      }
-
       const data = await response.json();
-      localStorage.setItem("token", data.token);
-
-      // Redirect based on is_hr property
-      if (data.is_hr) {
-        navigate("/hr-dashboard");
+      // Check if the message indicates the account is not approved
+      if (data.message === "Account not approved by HR yet") {
+        setError("Your account has not been approved by HR yet. Please wait for approval.");
       } else {
-        navigate("/employee-dashboard");
+        if (!response.ok) {
+          throw new Error("Login failed");
+        }
+
+        localStorage.setItem("token", data.token);
+        // Redirect based on is_hr property
+        if (data.is_hr) {
+          navigate("/hr-dashboard");
+        } else {
+          navigate("/employee-dashboard");
+        }
       }
     } catch (err) {
       console.error(err);
-      alert("Invalid username or password. Please try again.");
+      setError("Invalid username or password. Please try again.");
     }
   };
 
@@ -64,6 +70,14 @@ const Login = () => {
           Login
         </button>
       </form>
+      {/* Show error popup if there is an error */}
+      {error && (
+        <div className="error-popup">
+          <p>{error}</p>
+          <button onClick={() => setError(null)}>Close</button>
+        </div>
+      )}
+      <Button variant="secondary" className="mt-4 ms-3" onClick={() => navigate("/signup")}>Create New Account</Button>
     </div>
   );
 };

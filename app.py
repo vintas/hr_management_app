@@ -1,5 +1,4 @@
-import random
-from datetime import datetime
+from datetime import datetime, timezone
 
 from flask import Flask, jsonify, request, make_response
 from flask_cors import CORS
@@ -18,38 +17,117 @@ jwt = JWTManager(app)
 
 # Constants
 DEFAULT_PASSWORD = "password123"
+
 class User(db.Model):
+    __tablename__ = 'user'
+
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(50), unique=True, nullable=False)
     password = db.Column(db.String(200), nullable=False)
-    # role = db.Column(db.String(10), nullable=False)
     is_hr = db.Column(db.Boolean, default=False)
     is_approved = db.Column(db.Boolean, default=False)
+
+    # One-to-One relationship
+    employee = db.relationship("Employee", uselist=False, back_populates="user")
 
     def __repr__(self):
         return f"<User {self.username}>"
 
 class Employee(db.Model):
+    __tablename__ = 'employee'
+
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(50), nullable=False)
     dob = db.Column(db.Date, nullable=False)
-    joining_date = db.Column(db.Date, nullable=False)
+    joining_date = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     education = db.Column(db.String(100))
     department = db.Column(db.String(50))
     role = db.Column(db.String(50))
     salary = db.Column(db.Float)
+
+    # Foreign key to link with User table
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    user = db.relationship("User", backref="employee")
+
+    # One-to-One relationship
+    user = db.relationship("User", back_populates="employee")
+
+    def __repr__(self):
+        return f"<Employee {self.name}>"
+
+class LeaveRequest(db.Model):
+    __tablename__ = 'leave_request'
+
+    id = db.Column(db.Integer, primary_key=True)
+    employee_id = db.Column(db.Integer, db.ForeignKey('employee.id'), nullable=False)
+    start_date = db.Column(db.Date, nullable=False)
+    end_date = db.Column(db.Date, nullable=False)
+    reason = db.Column(db.String(255), nullable=False)
+    status = db.Column(db.String(20), default="Pending")  # Pending, Approved, Rejected
+
+    employee = db.relationship("Employee", backref="leave_requests")
+
+    def __repr__(self):
+        return f"<LeaveRequest {self.id} - {self.status}>"
 
 # User login
 @app.route('/login', methods=['POST'])
 def login():
     data = request.json
     user = User.query.filter_by(username=data['username']).first()
-    if user and check_password_hash(user.password, data['password']):
-        token = create_access_token(identity={'id': user.id, 'is_hr': user.is_hr})
-        return jsonify({'token': token, 'is_hr': user.is_hr}), 200
-    return jsonify({'message': 'Invalid credentials'}), 401
+    if not user or not check_password_hash(user.password, data["password"]):
+        return jsonify({"message": "Invalid username or password"}), 401
+
+    if not user.is_approved:
+        return jsonify({"message": "Account not approved by HR yet"}), 403
+
+    access_token = create_access_token(identity={"id": user.id, "is_hr": user.is_hr})
+    return jsonify({"token": access_token, "is_hr": user.is_hr}), 200
+
+@app.route('/signup', methods=['POST'])
+def signup():
+    data = request.get_json()
+
+    # Validate required fields
+    required_fields = ["username", "password", "name", "dob", "education"]
+    if not all(field in data for field in required_fields):
+        return jsonify({"message": "Missing required fields"}), 400
+
+    # Check if the username already exists
+    if User.query.filter_by(username=data["username"]).first():
+        return jsonify({"message": "Username already exists"}), 400
+
+    try:
+        # Parse and validate date of birth
+        dob = datetime.strptime(data["dob"], "%Y-%m-%d").date()
+    except ValueError:
+        return jsonify({"message": "Invalid date format for 'dob'. Use YYYY-MM-DD."}), 400
+
+    # Hash the password
+    hashed_password = generate_password_hash(data["password"])
+
+    # Create a new User entry
+    new_user = User(
+        username=data["username"],
+        password=hashed_password,
+        is_approved=False  # New users require HR approval
+    )
+
+    # Create a new Employee entry with partial data
+    new_employee = Employee(
+        name=data["name"],
+        dob=dob,
+        education=data["education"],
+        joining_date=datetime.now(timezone.utc)  # Default joining date
+    )
+
+    # Link the Employee to the User
+    new_user.employee = new_employee
+
+    # Save to the database
+    db.session.add(new_user)
+    db.session.commit()
+
+    return jsonify({"message": "Signup successful. Await HR approval."}), 201
 
 # HR can add a new employee
 @app.route('/employees', methods=['POST'])
@@ -76,11 +154,11 @@ def add_employee():
         return jsonify({"error": "Incorrect date format, should be YYYY-MM-DD"}), 400
 
     # Generate username and password for the employee
-    username = name.lower().replace(" ", "") + str(random.randint(100, 999))
+    username = name.lower().replace(" ", "")
     password = generate_password_hash(DEFAULT_PASSWORD)
 
     # Create user and employee records
-    new_user = User(username=username, password=password, is_hr=is_hr)
+    new_user = User(username=username, password=password, is_hr=is_hr, is_approved=True)
     db.session.add(new_user)
     db.session.commit()
 
@@ -98,6 +176,65 @@ def add_employee():
     db.session.commit()
 
     return jsonify({"message": "Employee added successfully", "username": username, "default_password": DEFAULT_PASSWORD, "role": role})
+
+@app.route('/pending_approvals', methods=['GET'])
+@jwt_required()
+def pending_approvals():
+    # Check if the logged-in user is HR
+    current_user = get_jwt_identity()
+    if not current_user["is_hr"]:
+        return jsonify({"message": "Unauthorized access"}), 403
+
+    # Query for users with is_approved = False
+    pending_users = User.query.filter_by(is_approved=False).all()
+
+    pending_users_data = [
+        {
+            "id": user.id,
+            "username": user.username,
+            "name": user.employee.name if user.employee else None,
+            "dob": user.employee.dob.strftime("%Y-%m-%d") if user.employee and user.employee.dob else None,
+            "education": user.employee.education if user.employee else None,
+            "department": user.employee.department if user.employee else None,
+            "role": user.employee.role if user.employee else None,
+            "salary": user.employee.salary if user.employee else None,
+            "joining_date": user.employee.joining_date.strftime("%Y-%m-%d") if user.employee and user.employee.joining_date else None,
+        }
+        for user in pending_users
+    ]
+
+    return jsonify(pending_users_data), 200
+
+@app.route('/approve_user/<int:user_id>', methods=['PUT'])
+@jwt_required()
+def approve_user(user_id):
+    current_user = get_jwt_identity()
+    if not current_user["is_hr"]:
+        return jsonify({"message": "Unauthorized access"}), 403
+
+    data = request.get_json()
+    user = User.query.get(user_id)
+    if not user or user.is_approved:
+        return jsonify({"message": "User not found or already approved"}), 404
+
+    # Update employee details
+    if not user.employee:
+        user.employee = Employee()  # Create new employee entry if missing
+
+    user.employee.name = data.get("name", user.employee.name)
+    user.employee.dob = datetime.strptime(data["dob"], "%Y-%m-%d") if "dob" in data else user.employee.dob
+    user.employee.education = data.get("education", user.employee.education)
+    user.employee.department = data.get("department", user.employee.department)
+    user.employee.role = data.get("role", user.employee.role)
+    user.employee.salary = data.get("salary", user.employee.salary)
+    user.employee.joining_date = datetime.strptime(data["joining_date"], "%Y-%m-%d") if "joining_date" in data else user.employee.joining_date
+
+    # Approve the user
+    user.is_approved = True
+
+    db.session.commit()
+
+    return jsonify({"message": "User approved successfully"}), 200
 
 @app.route('/employees', methods=['GET'])
 @jwt_required()
@@ -169,8 +306,7 @@ def get_employee(id):
     current_user = get_jwt_identity()
 
     # HR users can access any employee's details; others can only view their own
-    # current_user['id'] - 1 because User table has the Admin user too. TODO fix the User Employee primary ID issue.
-    if not current_user['is_hr'] and current_user['id'] - 1 != id:
+    if not current_user['is_hr'] and current_user['id'] != id:
         return jsonify({"error": "Permission denied"}), 403
 
     employee = Employee.query.get(id)
@@ -235,7 +371,7 @@ def delete_employee(employee_id):
         return jsonify({"message": "Unauthorized access"}), 403
 
     employee = Employee.query.get(employee_id)
-    user = User.query.get(employee_id+1)
+    user = User.query.get(employee.employee_id)
 
     if not employee or not user:
         return jsonify({"message": "Employee not found"}), 404
@@ -248,7 +384,93 @@ def delete_employee(employee_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({"message": "Error deleting employee", "error": str(e)}), 500
+
+@app.route('/leave-request', methods=['POST'])
+@jwt_required()
+def submit_leave_request():
+    data = request.get_json()
+    current_user_id = get_jwt_identity()['id']
+
+    # Get employee entry for the user
+    employee = Employee.query.filter_by(user_id=current_user_id).first()
+    if not employee:
+        return jsonify({"message": "Employee record not found"}), 404
+
+    try:
+        leave_request = LeaveRequest(
+            employee_id=employee.id,
+            start_date=datetime.strptime(data['start_date'], '%Y-%m-%d').date(),
+            end_date=datetime.strptime(data['end_date'], '%Y-%m-%d').date(),
+            reason=data['reason']
+        )
+        db.session.add(leave_request)
+        db.session.commit()
+        return jsonify({"message": "Leave request submitted successfully"}), 201
+    except Exception as e:
+        return jsonify({"message": "Failed to submit leave request", "error": str(e)}), 400
+
+@app.route('/leave-requests', methods=['GET'])
+@jwt_required()
+def get_leave_requests():
+    current_user = get_jwt_identity()
+    if not current_user['is_hr']:
+        return jsonify({"message": "Access denied"}), 403
+
+    leave_requests = LeaveRequest.query.all()
+    result = []
+    for leave in leave_requests:
+        result.append({
+            "id": leave.id,
+            "employee_name": leave.employee.name,
+            "start_date": leave.start_date.isoformat(),
+            "end_date": leave.end_date.isoformat(),
+            "reason": leave.reason,
+            "status": leave.status
+        })
+    return jsonify(result), 200
+
+@app.route('/leave-request/<int:leave_id>', methods=['PUT'])
+@jwt_required()
+def update_leave_request(leave_id):
+    current_user = get_jwt_identity()
+    if not current_user['is_hr']:
+        return jsonify({"message": "Access denied"}), 403
+
+    data = request.get_json()
+    leave_request = LeaveRequest.query.get(leave_id)
+    if not leave_request:
+        return jsonify({"message": "Leave request not found"}), 404
+
+    if data['status'] not in ['Approved', 'Rejected']:
+        return jsonify({"message": "Invalid status"}), 400
+
+    leave_request.status = data['status']
+    db.session.commit()
+    return jsonify({"message": "Leave request updated successfully"}), 200
+
+@app.route('/my-leave-requests', methods=['GET'])
+@jwt_required()
+def my_leave_requests():
+    current_user_id = get_jwt_identity()['id']
     
+    # Get employee entry for the user
+    employee = Employee.query.filter_by(user_id=current_user_id).first()
+    if not employee:
+        return jsonify({"message": "Employee record not found"}), 404
+
+    # Fetch leave requests for the employee
+    leave_requests = LeaveRequest.query.filter_by(employee_id=employee.id).all()
+    result = []
+    for leave in leave_requests:
+        result.append({
+            "id": leave.id,
+            "start_date": leave.start_date.isoformat(),
+            "end_date": leave.end_date.isoformat(),
+            "reason": leave.reason,
+            "status": leave.status
+        })
+    return jsonify(result), 200
+
 if __name__ == "__main__":
     with app.app_context():
         db.create_all()

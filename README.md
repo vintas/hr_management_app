@@ -68,15 +68,8 @@ flask run
 The backend should now be running on http://127.0.0.1:5000.
 
 Create Admin user:
-
-```python
-from app import app, db
-from app import User  
-from werkzeug.security import generate_password_hash
-with app.app_context():
-    admin_user = User(username="admin", password=generate_password_hash("admin"), role='HR', is_hr=True)
-    db.session.add(admin_user)
-    db.session.commit()
+```sh
+python create_admin.py
 ```
 
 Testing

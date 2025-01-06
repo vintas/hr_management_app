@@ -73,6 +73,21 @@ const HRDashboard = () => {
         >
           Add Employee
         </Button>
+        <Button
+          variant="info"
+          className="mt-4 ms-3"
+          onClick={() => navigate("/approval")}
+        >
+          Pending Employee Approvals
+        </Button>
+        <Button
+          variant="info"
+          className="mt-4 ms-3"
+          onClick={() => navigate("/approve-leave")}
+        >
+          Pending Leave Approvals
+        </Button>
+
 
         {error && <Alert variant="danger">{error}</Alert>}
         {successMessage && <Alert variant="success">{successMessage}</Alert>}
